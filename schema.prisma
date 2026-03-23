@@ -1,0 +1,252 @@
+// Buukkaamo Oy — Prisma schema
+// Stack: PostgreSQL via Supabase, Prisma ORM
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ─── Enums ───────────────────────────────────────────────────────────────────
+
+enum Role {
+  admin
+  employee
+  subcontractor
+  client
+}
+
+enum CampaignStatus {
+  active
+  paused
+  completed
+  archived
+}
+
+enum CallOutcome {
+  no_contact
+  no_answer
+  wrong_person
+  callback_needed
+  booked
+  completed
+  cancelled
+  no_show
+}
+
+enum MeetingStatus {
+  booked
+  completed
+  cancelled
+  no_show
+}
+
+enum TimeEventType {
+  start_work
+  start_break
+  end_break
+  end_work
+}
+
+enum LeaveType {
+  annual
+  sick
+  unpaid
+  other
+}
+
+enum LeaveStatus {
+  pending
+  approved
+  rejected
+}
+
+// ─── Users ───────────────────────────────────────────────────────────────────
+
+model User {
+  id         String   @id @default(uuid())
+  email      String   @unique
+  name       String
+  role       Role
+  is_active     Boolean  @default(true)
+  password_hash String?
+  created_at    DateTime @default(now())
+  updated_at    DateTime @updatedAt
+
+  client_profile       ClientProfile?
+  campaign_assignments CampaignAssignment[]
+  call_logs            CallLog[]
+  meetings             Meeting[]
+  kpi_snapshots        KpiSnapshot[]
+  time_entries         TimeEntry[]
+  time_corrections     TimeEntry[]          @relation("corrections")
+  leave_requests       LeaveRequest[]
+  leave_reviews        LeaveRequest[]       @relation("leave_reviews")
+
+  @@index([role])
+  @@index([is_active])
+  @@map("users")
+}
+
+model Client {
+  id            String   @id @default(uuid())
+  name          String
+  contact_email String?
+  is_active     Boolean  @default(true)
+  created_at    DateTime @default(now())
+  updated_at    DateTime @updatedAt
+
+  campaigns      Campaign[]
+  client_profile ClientProfile?
+
+  @@map("clients")
+}
+
+model ClientProfile {
+  id        String @id @default(uuid())
+  user_id   String @unique
+  client_id String @unique
+
+  user   User   @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  client Client @relation(fields: [client_id], references: [id], onDelete: Cascade)
+
+  @@map("client_profiles")
+}
+
+model Campaign {
+  id              String         @id @default(uuid())
+  client_id       String
+  name            String
+  alias_name      String?
+  is_confidential Boolean        @default(false)
+  status          CampaignStatus @default(active)
+  start_date      DateTime?
+  end_date        DateTime?
+  created_at      DateTime       @default(now())
+  updated_at      DateTime       @updatedAt
+
+  client        Client               @relation(fields: [client_id], references: [id])
+  assignments   CampaignAssignment[]
+  call_logs     CallLog[]
+  meetings      Meeting[]
+  kpi_snapshots KpiSnapshot[]
+
+  @@index([client_id])
+  @@index([status])
+  @@map("campaigns")
+}
+
+model CampaignAssignment {
+  id          String   @id @default(uuid())
+  campaign_id String
+  user_id     String
+  assigned_at DateTime @default(now())
+
+  campaign Campaign @relation(fields: [campaign_id], references: [id], onDelete: Cascade)
+  user     User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@unique([campaign_id, user_id])
+  @@index([user_id])
+  @@index([campaign_id])
+  @@map("campaign_assignments")
+}
+
+model CallLog {
+  id          String      @id @default(uuid())
+  campaign_id String
+  user_id     String
+  outcome     CallOutcome
+  called_at   DateTime    @default(now())
+  notes       String?
+
+  campaign Campaign @relation(fields: [campaign_id], references: [id])
+  user     User     @relation(fields: [user_id], references: [id])
+
+  @@index([campaign_id])
+  @@index([user_id])
+  @@index([called_at])
+  @@index([outcome])
+  @@map("call_logs")
+}
+
+model Meeting {
+  id            String        @id @default(uuid())
+  campaign_id   String
+  user_id       String
+  status        MeetingStatus @default(booked)
+  booked_at     DateTime      @default(now())
+  scheduled_for DateTime
+  completed_at  DateTime?
+  notes         String?
+
+  campaign Campaign @relation(fields: [campaign_id], references: [id])
+  user     User     @relation(fields: [user_id], references: [id])
+
+  @@index([campaign_id])
+  @@index([user_id])
+  @@index([status])
+  @@index([scheduled_for])
+  @@map("meetings")
+}
+
+model KpiSnapshot {
+  id                 String   @id @default(uuid())
+  user_id            String
+  campaign_id        String
+  snapshot_date      DateTime @db.Date
+  calls_made         Int      @default(0)
+  calls_answered     Int      @default(0)
+  meetings_booked    Int      @default(0)
+  meetings_completed Int      @default(0)
+  no_show            Int      @default(0)
+  no_contact         Int      @default(0)
+  worked_minutes     Int      @default(0)
+
+  user     User     @relation(fields: [user_id], references: [id])
+  campaign Campaign @relation(fields: [campaign_id], references: [id])
+
+  @@unique([user_id, campaign_id, snapshot_date])
+  @@index([user_id])
+  @@index([campaign_id])
+  @@index([snapshot_date])
+  @@map("kpi_snapshots")
+}
+
+model TimeEntry {
+  id              String        @id @default(uuid())
+  user_id         String
+  event_type      TimeEventType
+  occurred_at     DateTime      @default(now())
+  corrected_by    String?
+  correction_note String?
+
+  user      User  @relation(fields: [user_id], references: [id])
+  corrector User? @relation("corrections", fields: [corrected_by], references: [id])
+
+  @@index([user_id])
+  @@index([occurred_at])
+  @@map("time_entries")
+}
+
+model LeaveRequest {
+  id          String      @id @default(uuid())
+  user_id     String
+  leave_type  LeaveType
+  start_date  DateTime    @db.Date
+  end_date    DateTime    @db.Date
+  status      LeaveStatus @default(pending)
+  reviewed_by String?
+  notes       String?
+  created_at  DateTime    @default(now())
+
+  user     User  @relation(fields: [user_id], references: [id])
+  reviewer User? @relation("leave_reviews", fields: [reviewed_by], references: [id])
+
+  @@index([user_id])
+  @@index([status])
+  @@map("leave_requests")
+}
