@@ -1,246 +1,230 @@
-# Buukkaamo Agent OS — MVP-ehdotus
+# New Company Agent OS — Plan review (v0.3)
 
-**Versio:** 0.2  
+**Versio:** 0.3  
 **Päiväys:** 2026-09-19  
-**Tavoite:** Yrityksen hallinnointijärjestelmä, jossa AI-agentit hoitavat legal/tutkimusta, myyntiä, markkinointia ja analyysiä — sinä hyväksyt kriittiset asiat.  
-**Budjettilinja:** pidä juoksevat kulut **mahdollisimman pieninä** (tavoite alussa ~0–50 €/kk).
+**Konteksti:** Uusi yritys. Halpa polku. Legal ensin (myöhemmin skipattavissa).  
+**Tärkeä lähtötieto:** Myyntiin on **jo** AI + email -järjestelmä: Slack-komento (esim. “send ten audit messages”) → lähettää CRM-sheetin kontakteille. **Emme rakenna sitä uudelleen.**
 
 ---
 
-## 1. Tiivistelmä
+## 1. Mitä rakennetaan — ja mitä ei
 
-Rakennetaan **Agent OS**: yksi hallintapaneeli + agenttiroolit, jotka työskentelevät taustalla (myös yön yli). MVP automatisoi **valmistelun ja rutiinin**; ihminen hyväksyy ulospäin menevän.
+| Kerros | Rakennetaanko? | Miksi |
+|--------|----------------|------|
+| Slack → email outreach → CRM sheet | **Ei** | Sinulla on jo. Uudelleenrakennus = rahan hukkaa |
+| Legal / Research + Accept-jono | **Kyllä (ensin)** | Puuttuu; halpa; voi sammuttaa myöhemmin |
+| Marketing Studio (LinkedIn / email / IG…) | **Kyllä (ydin uuteen firmään)** | Puuttuu; tämä on “content + approve + schedule” |
+| Sales Agent (täysi outbound) | **Ei MVP:ssä** | Päällekkäinen nykyisen kanssa |
+| Sales “thin layer” (valinnainen myöhemmin) | Ehkä | Vain jos tuo jotain mitä Slack-flow ei tee |
 
-**MVP:n lupaus**
-
-> Aamulla avaat paneelin. Yön aikana agentit ovat valmistelleet research-briefin / riskiliput (ja myöhemmin follow-upit sekä markkinointiluonnokset). Hyväksyt / hylkäät / muokkaat — ja työ jatkuu.
-
-Rakentuu nykyisen Buukkaamo-datamallin päälle (`Campaign`, `CallLog`, `Meeting`, `KpiSnapshot`).
-
-**Prioriteetti (päivitetty):** Legal/Research **ensin**. Se on kuitenkin **modulaarinen** — voidaan kytkeä pois myöhemmin ilman että Sales/Marketing kaatuu.
-
----
-
-## 2. Visio vs. MVP
-
-| Alue | Visio (myöhemmin) | MVP (ensin) | Pakollinen? |
-|------|-------------------|-------------|-------------|
-| Legal / Research | Jatkuva seuranta + syvempi analyysi | Lähdelista → brief + riskiliput | **Ensin kyllä**, myöhemmin voi skipata |
-| Myynti | Autonominen outreach | Priorisointi + viestiluonnokset | Seuraava |
-| Markkinointi | Automaattijulkaisu | Draftit + Accept | Seuraava |
-| Insights | Täysi konsultointi | KPI-yhteenveto omasta datasta | Halpa lisä |
-| Hallinta | Koko yrityksen automaatio | Jono + audit + agent on/off | Kyllä (runko) |
-
-**Periaate:** agentti ehdottaa, ihminen hyväksyy. Jokainen agentti on **kytkin**: `enabled: true/false`.
+**Rahallinen nyrkkisääntö:** älä maksa kahdesti samasta työstä (lähetä N viestiä sheetistä).
 
 ---
 
-## 3. Agenttiroolit
+## 2. Sales — mitä se tekisi, mitä se osaisi, onko se rahan arvoista?
 
-### 3.1 Legal / Research Agent — “vahti” (ensin)
-
-**Tekee**
-- Käy läpi määritellyn lähdelistan (kilpailijat, toimialauutiset, julkinen sääntely)
-- Tuottaa lyhyen “mitä muuttui” -briefin
-- Liputtaa riskejä (väittämät, GDPR-huomiot, liialliset lupaukset)
-
-**Ei tee**
-- Sitovaa juridista neuvontaa
-- Sopimusten allekirjoitusta / muutosta
-
-**Skip later:** agentti voidaan sammuttaa asetuksista; Sales/Marketing eivät riipu siitä.
-
-### 3.2 Sales Agent
-
-Priorisoi leadit, luo follow-up-luonnokset, tuottaa päivälistan. Ei autonomista sulkemista MVP:ssä.
-
-### 3.3 Marketing Agent
-
-Luo sisältöluonnokset + aikataulun. **Julkaisu vain Acceptin kautta.**
-
-### 3.4 Insights Agent
-
-KPI-yhteenvedot Buukkaamo-datasta + 2–3 toimenpide-ehdotusta. Halpa, koska data on jo omassa DB:ssä.
-
----
-
-## 4. Käyttäjäkokemus (MVP)
-
-### Aamunäkymä
-
-1. Hyväksyntäjono (briefit, riskiliput, myöhemmin draftit)  
-2. Yön yhteenveto  
-3. Agenttien status (on/off) + kulukatto  
-4. Myöhemmin: myyntilista + KPI
-
-### Hyväksyntävirta
+### 2.1 Mitä sinulla on jo (oletus)
 
 ```
-Agentti tuottaa draftin / briefin
+Slack: "send 10 audit messages"
         ↓
-pending_approval
+AI + email system
         ↓
-Approve / Edit / Reject
+CRM sheet (kontaktit / status)
         ↓
-Approve → tallenna / (myöhemmin) julkaise
+Viestit lähtevät
 ```
 
----
+Tämä kattaa jo: **volume outreach**, sheet-pohjaisen CRM:n, komennettavan lähetyksen.
 
-## 5. Tekninen arkkitehtuuri (halpa polku)
+### 2.2 Mitä “Sales Agent” *voisi* tehdä teoriassa
 
-- **App:** Next.js  
-- **DB:** PostgreSQL + Prisma (nykyinen)  
-- **Jobs:** yksinkertainen cron (ei erillistä jono-SaaS:ia alussa)  
-- **LLM:** yksi **edullinen** malli + tiukat token-katot  
-- **Lähteet Legalille:** manuaalinen URL-lista / RSS — **ei maksullista news-API:a** alussa  
-- **Julkaisu:** copy/clipboard tai manuaalinen — **ei some-SaaS:ia** alussa  
+| Kyky | Kuvaus | Tarvitaanko sinulle? |
+|------|--------|----------------------|
+| Batch send N emails | Slack → sheet → send | **Ei — jo olemassa** |
+| Kirjoita cold email -template | AI draftaa audit/myyntiviestin | Todennäköisesti jo olemassa |
+| Priorisoi ketä lähestyä | Ranking sheetistä | Ehkä, jos sheetissä ei ole logiikkaa |
+| Follow-up timing | “Kenelle ei vastattu 5 pv” | Ehkä hyödyllinen |
+| Reply handling | Ehdottaa vastausta saapuneeseen | Hyödyllinen, jos ei ole |
+| Meeting prep | Brief ennen callia | Hyödyllinen later |
+| Pipeline coaching | “Nämä 5 dealia liikkuvat” | Later |
+| Autonominen neuvottelu / close | Agentti sulkee diilin | Ei MVP, ei cheap path |
+| Soittaminen | Voice/outbound calls | Ei tässä suunnitelmassa |
 
-### Uudet taulut (luonnos)
+### 2.3 Suositus Salesille (uusi yritys + olemassa oleva AI email)
 
-- `Agent` (rooli, `enabled`, budget_cap)
-- `AgentRun` (ajo, tokenit, kustannusarvio)
-- `ApprovalItem`
-- `ResearchBrief`
-- `ContentDraft` (myöhemmin)
-- `PolicyRule`
+**MVP: älä rakenna Sales Agentia outboundiin.**
 
----
+Se olisi **waste of money**, jos se vain toistaa: “lähetä 10 viestiä sheetille.”
 
-## 6. MVP-laajuus
+**Myöhemmin (vain jos tarve):** ohut kerros, joka **ei korvaa** Slack-flow’ta vaan täydentää:
 
-### Mukana heti
+1. **Reply coach** — saapunut vastaus → ehdotettu vastaus Acceptilla  
+2. **Stale follow-up list** — “nämä 12 eivät vastanneet” → sinä päätät, Slack-komento hoitaa sendin  
+3. **Nightly sales digest** — lyhyt yhteenveto sheetistä (lähetetty / vastattu / bookattu)
 
-1. Command Center + hyväksyntäjono  
-2. **Legal/Research Agent** (kytkettävä pois myöhemmin)  
-3. Audit-loki + kk-/päiväkatto LLM:lle  
-4. Agent on/off -kytkimet  
+Integraatiomalli:
 
-### Seuraavaksi
+```
+[Olemassa oleva] Slack + email + CRM sheet   ← pysyy totuuden lähteenä lähetykselle
+        ↑
+[Uusi, valinnainen] Sales digest / reply drafts  ← lukee sheettiä, ei lähetä itse
+```
 
-5. Sales Agent  
-6. Marketing Agent  
-7. Insights Agent  
+### 2.4 Onko Sales-agentti rahan arvoinen?
 
-### Pois (säästää rahaa)
+| Vaihtoehto | Arvo | Kustannuslogiikka |
+|------------|------|-------------------|
+| Uudelleenrakenna email outreach | **Huono** | Tupla työ + tupla ylläpito |
+| Älä rakenna Salesia MVP:ssä | **Hyvä** | 0 € ylimääräistä |
+| Thin layer (digest + replies) myöhemmin | **OK** | Pieni LLM-kulu, iso hyöty vain jos replyt ovat pullonkaula |
 
-- Maksulliset news/data-API:t  
-- Some-julkaisutyökalut  
-- Erillinen CRM  
-- Autonominen cold calling / mainosbudjetti  
-- Useita kalliita malleja rinnakkain  
-
----
-
-## 7. Kustannukset — miksi aiemmat luvut näyttivät “kovilta”?
-
-### Lyhyt vastaus
-
-Aiemmat luvut olivat **haarukoita ylöspäin**: ne summasivat infraa, LLM:ää ja **valinnaisia** työkaluja “normaali/kasvu” -skenaarioissa. Ne eivät olleet minimi, jota tarvitaan.
-
-**Halpa polku ei tarvitse lähes mitään kuukausimaksuja.**
-
-### Mistä kulut oikeasti syntyvät?
-
-| Kori | Onko pakko? | Selitys |
-|------|-------------|---------|
-| Hosting + DB | Melkein ilmainen alussa | Free/hobby-tier riittää MVP:lle |
-| LLM API | Kyllä, pieni | Ainoa oikea muuttuva kulu: maksaa per ajo/token |
-| Sähköposti-SaaS, some-SaaS, news-API, erillinen CRM | **Ei** | Nämä paisuttivat aiempaa “normaali/kasvu” -haarukkaa |
-| Mainosmediat (Meta/Google) | Ei järjestelmän kulu | Markkinointibudjetti erillään |
-| Ulkoinen ohjelmistotalo | Ei | Rakennetaan tähän repoon agenttivetoisesti |
-
-Eli: **järjestelmä itsessään ei ole kallis** — kalliiksi tulee vasta kun lisätään SaaS-työkaluja, raskasta researchiä jatkuvasti, ja paljon LLM-ajoja ilman kattoa.
-
-### 7.1 Cheap path (suositus)
-
-| Kuluerä | Arvio / kk | Huomio |
-|---------|------------|--------|
-| Hosting + DB | **0–15 €** | Free-tierillä usein 0 € |
-| LLM (Legal brief + muutama ajo/pv) | **5–30 €** | Edullinen malli + katot |
-| Muut SaaS:it | **0 €** | Skipataan |
-| **Yhteensä** | **~5–45 €/kk** | Tavoite |
-
-### 7.2 Miten LLM pidetään halpana
-
-1. **Yksi edullinen malli** (ei premiumia joka ajoon)  
-2. **Päivä- ja kk-katto** euroissa (agentti pysähtyy)  
-3. **Lyhyet outputit** (brief ½–1 sivu, ei 20 sivun raportteja)  
-4. **Harva ajo** Legalille: esim. 1×/yö tai 3×/viikko — ei jatkuvaa pollausta  
-5. **Omat lähteet** (URL-lista), ei maksullista data-API:a  
-6. Legal **voidaan sammuttaa** → kulut tippuvat lähes nollaan muilta osin kunnes Sales/Marketing otetaan käyttöön  
-
-### 7.3 Mitä aiemmat “150–400 €” ja “400–1000 €” tarkoittivat?
-
-Ne olivat **kasvuskenaarioita**, joissa mukana:
-- enemmän agentteja päivittäin  
-- pidemmät raportit  
-- mahdollisesti sähköposti-/some-työkaluja  
-- mahdollisesti data-API  
-
-Ne **eivät ole lähtöhinta**. Cheap path alkaa kymmenistä euroista tai alle.
-
-### 7.4 Rakentamiskustannus
-
-Ei erillistä lisenssiä. Työ tehdään tähän Buukkaamo-repoon. Isoin “kustannus” on päätökset: lähdelista, tone, mitä Acceptataan.
+**Verdict:** Sales = **out of MVP scope** paitsi jos erikseen pyydät thin layeriä. Rahasi menevät Marketingiin + Legaliin.
 
 ---
 
-## 8. Vaiheistus (päivitetty)
+## 3. Marketing — mitä järjestelmä tarkalleen on?
 
-### Vaihe A — Runko + Legal (ensin)
-- Schema: Agent, AgentRun, ApprovalItem, ResearchBrief  
-- Command Center + jono  
-- Legal/Research Agent (URL-lista → brief + riskiliput)  
-- LLM-katto + agent on/off (**Legal skipattavissa**)
+### 3.1 Yksi lause
 
-### Vaihe B — Myynti
-- Sales Agent + kampanjadata  
-- Päivälista + viestiluonnokset  
+**Marketing Studio** = agentti tuottaa kanavakohtaiset draftit → sinä Accept/Edit → julkaisu (aluksi puolimanuaalinen, myöhemmin kytketty API).
 
-### Vaihe C — Markkinointi
-- Marketing drafts + Accept  
+Ei ole “mainostoimisto joka polttaa budjettia itsestään.”  
+Ei ole Meta Ads Manager.  
+Se on **sisällön tuotanto + hyväksyntä + kanavajono** uudelle brändille.
 
-### Vaihe D — Insights + (valinnainen) kevyt automaatio
-- KPI-brief  
-- Vasta myöhemmin: sähköpostilähetys Acceptin jälkeen  
+### 3.2 Kanavat (mitä tuetaan ja miten)
+
+| Kanava | Mitä agentti tuottaa | Julkaisu MVP:ssä | Myöhemmin |
+|--------|----------------------|------------------|-----------|
+| **LinkedIn** (org / personal) | Post copy, carousel-tekstit, kommentointiehdotukset | Accept → copy tai schedule-jonoon | LinkedIn API / Buffer-tyyppinen |
+| **Email** (newsletter / nurture) | Subject + body + CTA | Accept → lähetys olemassa olevalla email-työkalulla **tai** manuaalisesti | Automaattinen send Acceptin jälkeen |
+| **Instagram** | Caption, hashtag-ehdotus, reel/script outline | Accept → copy paste / Creator Studio | Meta Graph API |
+| **(Valinnainen later)** X / TikTok / blog | Sama malli: draft → Accept | Skip MVP | Lisää kanava kytkimellä |
+| **Ads copy** (LinkedIn/Meta) | Mainostekstit + kulmat | Vain draft; **budjettia ei käytetä automaattisesti** | Ihminen laittaa Ads Manageriin |
+
+**Email-markkinointi ≠ sales Slack-send.**  
+Sales sheet-outreach = 1:1 / cold.  
+Marketing email = lista, newsletter, nurture, brand.
+
+### 3.3 Päivittäinen / viikoittainen flow
+
+```
+Brand kit (ääni, kieltomaiset väittämät, CTA:t, logo-linkit)
+        ↓
+Marketing Agent ajaa (esim. 3×/viikko tai yön ajo)
+        ↓
+Tuottaa paketin, esim.:
+  - 3× LinkedIn post
+  - 2× Instagram caption (+ reel outline)
+  - 1× email newsletter draft
+        ↓
+Kaikki → Approval queue
+        ↓
+Sinä: Approve / Edit / Reject  (< 15 min)
+        ↓
+Approved → "Ready to publish" per channel
+        ↓
+MVP: sinä julkaiset (tai yksi klikki myöhemmin)
+Legal (jos on): voi liputtaa riskiväittämiä ennen Acceptia
+```
+
+### 3.4 Mitä UI:ssa näkyy (Marketing)
+
+- **Calendar** — miltä viikko näyttää per kanava  
+- **Queue** — pending drafts  
+- **Brand rules** — tone, banned claims, links  
+- **Per-channel variants** — sama idea → LinkedIn vs IG vs email -versiot  
+- **Status:** draft → pending → approved → published (manual check)  
+
+### 3.5 Mitä Marketing **ei** tee cheap pathissa
+
+- Ei osta mainoksia eikä liikuta ad-budjettia  
+- Ei skrapaa Instagramia massana  
+- Ei tarvitse maksullista social suitea day-1  
+- Ei korvaa designeria (kuvat: aluksi template / oma asset / myöhemmin erillinen image-step)
+
+### 3.6 Onko Marketing rahan arvoinen?
+
+**Kyllä — uudelle firmalle tämä on todennäköisesti arvokkain uusi osa**, koska:
+- Sales outreach on jo hoidossa  
+- Brändi tarvitsee tasaisen läsnäolon LinkedIn + IG + email  
+- Accept-malli pitää riskin pienenä  
+- LLM-kulu pysyy pienenä jos ajetaan harvoin ja lyhyillä teksteillä  
+
+Arvio LLM:lle Marketing-only kevyesti: usein **~5–25 €/kk** (muutama paketti / viikko).
 
 ---
 
-## 9. Mittarit
+## 4. Legal — lyhyt muistutus (ensin, skip later)
 
-- Aamun hyväksyntä &lt; 15 min  
-- Legal brief käyttökelpoinen ilman isoa editointia  
-- LLM-kulut ≤ sovittu katto (esim. **30 €/kk**)  
-- Legal voidaan sammuttaa ilman regressiota muihin agentteihin  
-- 0 ulospäin julkaisua ilman Acceptia  
+- URL-lista → brief + riskiliput (esim. väittämät markkinointidrafteissa)  
+- `enabled: false` milloin tahansa  
+- Ei lakimieskorvike  
 
----
-
-## 10. Riskit
-
-| Riski | Hallinta |
-|-------|----------|
-| LLM-lasku karkaa | Eurokatto + harvat ajot |
-| Legal “leikkii lakimiestä” | Vain research + checklist -kieli |
-| Turha agentti myöhemmin | `enabled: false` |
-| Hallusinaatiot | Pakolliset lähdelinkit briefissä |
+Uudelle firmalle hyödyllinen alussa (väittämät, kilpailija, compliance-huomiot), ei pakollinen ikuisesti.
 
 ---
 
-## 11. Suositus (v0.2)
+## 5. Mitä tarvitaan oikeasti (prioriteetti uudelle firmalle)
 
-1. **Aloita Legal/Research + Command Center** (halpa, hyödyllinen, kytkettävissä pois)  
-2. Pidä juoksevat kulut **~5–45 €/kk** -linjassa  
-3. Lisää Sales ja Marketing vasta kun Legal-rutiini toimii  
-4. Älä osta SaaS-työkaluja ennen kuin Accept-jono on käytössä  
+### Worth money
+
+1. **Marketing Studio** (LinkedIn + email + Instagram drafts + Accept)  
+2. **Approval / Command Center** (yhteinen jono)  
+3. **Legal/Research** (ensin, kytkettävä pois)  
+4. **LLM-katot** (jotta pysyy halvana)  
+
+### Not worth money (nyt)
+
+1. Uusi Sales outbound -moottori (Slack+email+sheet jo hoitaa)  
+2. Maksullinen news-API  
+3. Täysi social publishing SaaS day-1  
+4. Autonominen ads spend  
+5. Toinen CRM Buukkaamo-scheman / sheetin rinnalle “varmuuden vuoksi”
+
+### Maybe later (thin, cheap)
+
+- Sales digest / reply coach lukemaan CRM-sheettiä  
+- API-julkaisu Acceptin jälkeen (LinkedIn/IG)  
+- Insights viikkoraportti  
 
 ---
 
-## 12. Seuraava päätös
+## 6. Päivitetty vaiheistus
 
-**A.** Aloita Vaihe A (Legal + jono + katot) — cheap path  
-**B.** Legal ensin, mutta vielä kapeampi: vain viikkobrief (ei yön ajoja)  
-**C.** Skip Legal heti → suoraan Sales (vastoin nykyistä prioriteettia)
+### Vaihe A — Runko + Legal
+Command Center, ApprovalItem, Legal brief, agent on/off, €-katto
 
-Seuraava deliverable valinnan jälkeen: Prisma-laajennus + Command Center -runko + Legal-agentin ensimmäinen ajo.
+### Vaihe B — Marketing Studio (uuden firman ydin)
+Kanavat: **LinkedIn, Email, Instagram**  
+Draft packets → Accept → ready-to-publish  
+Brand kit
+
+### Vaihe C — (valinnainen) Sales thin layer
+Vain digest + reply drafts; **lähetys jää nykyiseen Slack-järjestelmään**
+
+### Vaihe D — Julkaisuautomaatio
+API/schedule hyväksytyille posteille; ads copy edelleen manuaalinen budjetti
+
+---
+
+## 7. Cheap path kulut (tämä rajaus)
+
+| | Arvio / kk |
+|--|------------|
+| Hosting/DB | 0–15 € |
+| LLM Legal + Marketing | 10–40 € |
+| Sales rebuild | **0 €** (ei tehdä) |
+| Social SaaS | 0 € MVP |
+| **Yhteensä** | **~10–50 €/kk** |
+
+---
+
+## 8. Seuraava päätös
+
+**A.** Vaihe A (Legal + jono), sitten B (Marketing Studio LI/Email/IG) — Sales skip  
+**B.** Skip Legal → suoraan Marketing Studio (jos Legal ei nyt tärkeä)  
+**C.** Silti haluat Sales thin layerin (digest/replies) jo B:n rinnalle  
+
+Kerro myös Marketingiin: julkaistaanko MVP:ssä **vain draft+Accept** (halvin) vai heti **schedule/publish-kytkentä** LinkedIniin/IG:hen (enemmän työtä, vähän enemmän kulua/riskiä).
